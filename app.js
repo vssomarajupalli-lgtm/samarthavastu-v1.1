@@ -941,24 +941,24 @@ devataMode: true,
         let segs = [];
 
         // ── East face (NE corner → SE corner) ──
-        segs.push({id:0,  name:"Shikhi", len:sE.corner, rating:"bad"});
-        for(let i=1;i<=7;i++) segs.push({id:i,    name:FULL_CHAIN[i].en,    len:sE.mid, rating:FULL_CHAIN[i].rating});
-        segs.push({id:8,  name:"Agni",   len:sE.corner, rating:"bad"});
+        segs.push({id:0,  name:"Shikhi", len:sE.corner, rating:"bad",     dir:"East"});
+        for(let i=1;i<=7;i++) segs.push({id:i,    name:FULL_CHAIN[i].en,    len:sE.mid, rating:FULL_CHAIN[i].rating,    dir:"East"});
+        segs.push({id:8,  name:"Agni",   len:sE.corner, rating:"bad",     dir:"East"});
 
         // ── South face (SE corner → SW corner) ──
-        segs.push({id:8,  name:"Agni",   len:sS.corner, rating:"bad"});
-        for(let i=1;i<=7;i++) segs.push({id:8+i,  name:FULL_CHAIN[8+i].en,  len:sS.mid, rating:FULL_CHAIN[8+i].rating});
-        segs.push({id:16, name:"Pitra",  len:sS.corner, rating:"bad"});
+        segs.push({id:8,  name:"Agni",   len:sS.corner, rating:"bad",     dir:"South"});
+        for(let i=1;i<=7;i++) segs.push({id:8+i,  name:FULL_CHAIN[8+i].en,  len:sS.mid, rating:FULL_CHAIN[8+i].rating,  dir:"South"});
+        segs.push({id:16, name:"Pitra",  len:sS.corner, rating:"bad",     dir:"South"});
 
         // ── West face (SW corner → NW corner) ──
-        segs.push({id:16, name:"Pitra",  len:sW.corner, rating:"bad"});
-        for(let i=1;i<=7;i++) segs.push({id:16+i, name:FULL_CHAIN[16+i].en, len:sW.mid, rating:FULL_CHAIN[16+i].rating});
-        segs.push({id:24, name:"Roga",   len:sW.corner, rating:"bad"});
+        segs.push({id:16, name:"Pitra",  len:sW.corner, rating:"bad",     dir:"West"});
+        for(let i=1;i<=7;i++) segs.push({id:16+i, name:FULL_CHAIN[16+i].en, len:sW.mid, rating:FULL_CHAIN[16+i].rating, dir:"West"});
+        segs.push({id:24, name:"Roga",   len:sW.corner, rating:"bad",     dir:"West"});
 
         // ── North face (NW corner → NE corner) ──
-        segs.push({id:24, name:"Roga",   len:sN.corner, rating:"bad"});
-        for(let i=1;i<=7;i++) segs.push({id:24+i, name:FULL_CHAIN[24+i].en, len:sN.mid, rating:FULL_CHAIN[24+i].rating});
-        segs.push({id:0,  name:"Shikhi", len:sN.corner, rating:"bad"});
+        segs.push({id:24, name:"Roga",   len:sN.corner, rating:"bad",     dir:"North"});
+        for(let i=1;i<=7;i++) segs.push({id:24+i, name:FULL_CHAIN[24+i].en, len:sN.mid, rating:FULL_CHAIN[24+i].rating, dir:"North"});
+        segs.push({id:0,  name:"Shikhi", len:sN.corner, rating:"bad",     dir:"North"});
 
         // ── Apply rotation shift and stamp d_start / d_end ──
         let P = N + E + S + W;
@@ -2048,7 +2048,7 @@ devataMode: true,
         
         const sP = getSitePolygon(), hP = getHousePolygon();
         const sDevData = getShiftedDevathas(sP, state.siteN, state.siteE, state.siteS, state.siteW, state.rotation);
-        const hDevData = getShiftedDevathas(hP, state.houseNs, state.houseEw, state.houseNs, state.houseEw, state.rotation);
+        const hDevData = getShiftedDevathas(hP, state.houseEw, state.houseNs, state.houseEw, state.houseNs, state.rotation);
         const metric = getAyadiMetric(); 
         const ayadi = getAyadiData(metric); 
         const lang = document.getElementById('globalLangSelect') ? document.getElementById('globalLangSelect').value : document.getElementById('reportLang') ? document.getElementById('reportLang').value : 'en';
@@ -2410,7 +2410,7 @@ ${(state.roomsByFloor && state.roomsByFloor[1] && state.roomsByFloor[1].length >
 </p>
 <table>
     <thead><tr style="background:#475569; color:#ffffff; -webkit-print-color-adjust:exact; print-color-adjust:exact;"><th style="border:1px solid #94a3b8; padding:8px; color:#ffffff; background:#475569; -webkit-print-color-adjust:exact; print-color-adjust:exact;">#</th><th style="border:1px solid #94a3b8; padding:8px; color:#ffffff; background:#475569; -webkit-print-color-adjust:exact; print-color-adjust:exact;">${tr('dev') || 'Devatha'}</th><th style="border:1px solid #94a3b8; padding:8px; color:#ffffff; background:#475569; -webkit-print-color-adjust:exact; print-color-adjust:exact;">${tr('len') || 'Length'}</th><th style="border:1px solid #94a3b8; padding:8px; color:#ffffff; background:#475569; -webkit-print-color-adjust:exact; print-color-adjust:exact;">${tr('st') || 'Starts At'}</th><th style="border:1px solid #94a3b8; padding:8px; color:#ffffff; background:#475569; -webkit-print-color-adjust:exact; print-color-adjust:exact;">${tr('end') || 'Ends At'}</th></tr></thead>
-    <tbody>${getDevRowsWithTotals(hDevData, state.houseEw, state.houseNs, state.houseEw, state.houseNs)}</tbody>
+    <tbody>${getDevRowsWithTotals(hDevData, state.houseNs, state.houseEw, state.houseNs, state.houseEw)}</tbody>
 </table>
 
 <h2>5. ${tr('d_out') || 'Outer Site Devatha Stanas'} (Direction-wise)</h2>
