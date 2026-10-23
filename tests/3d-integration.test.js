@@ -35,6 +35,20 @@ test('the default 3D camera follows the 2D compass orientation and dimensions ar
   assert.match(html, /id="vastu3DLabels" checked/);
 });
 
+test('3D room and Devata labels use high-contrast colors and readable sizing', () => {
+  assert.match(view, /rgba\(255,255,255,0\.97\)/);
+  assert.match(view, /context\.strokeStyle = '#64748b'/);
+  assert.match(view, /context\.font = '700 34px system-ui, sans-serif'/);
+  assert.match(view, /context\.filter = 'contrast\(110%\) saturate\(110%\)'/);
+  assert.match(view, /rgba\(255,253,247,0\.98\)/);
+  assert.match(view, /context\.strokeStyle = '#475569'/);
+  assert.match(view, /context\.filter = 'contrast\(110%\) saturate\(110%\)'/);
+  assert.match(view, /item\.rating === 'good' \? '#16a34a' : \(item\.rating === 'bad' \? '#dc2626' : '#334155'\)/);
+  assert.match(view, /context\.filter = 'none'/);
+  assert.match(view, /context\.font = '700 32px system-ui, sans-serif'/);
+  assert.match(view, /sprite\.scale\.set\(labelWidth, labelWidth \* 0\.32, 1\)/);
+});
+
 test('3D view requires WebGL 2 and reports a fallback without affecting 2D', () => {
   assert.match(view, /WebGL\.isWebGL2Available\(\)/);
   assert.match(view, /Your 2D floor plan is unchanged/);
@@ -43,6 +57,7 @@ test('3D view requires WebGL 2 and reports a fallback without affecting 2D', () 
 });
 
 test('PWA app shell precaches the local 3D renderer and controls', () => {
+  assert.match(worker, /CACHE_NAME = CACHE_PREFIX \+ 'shell-v5'/);
   [
     './floorplan-3d-model.js',
     './3d-view.js',
