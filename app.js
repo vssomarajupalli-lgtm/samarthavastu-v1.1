@@ -346,20 +346,7 @@ devataMode: true,
                 inp.type = 'file'; inp.accept = '.json';
                 inp.onchange = e => {
                     let f = e.target.files[0]; if(!f) return;
-                    let r = new FileReader();
-                    r.onload = ev => {
-                        try {
-                            let p = JSON.parse(ev.target.result);
-                            Object.assign(state, p);
-                            if(typeof window.migrateToFloors === 'function') window.migrateToFloors();
-                            state.isLShape = false;
-                            window.updateFromInputs(); renderItemList(); renderShapeList();
-                            window.draw(); window.saveLocal();
-                            window.syncMobHeaderClientName&&window.syncMobHeaderClientName();
-                            showToast('Project imported ✅');
-                        } catch(ex) { alert('Invalid project file.'); }
-                    };
-                    r.readAsText(f);
+                    window.importProject({ target: { files: [f] } });
                 };
                 inp.click();
             });
@@ -1027,13 +1014,20 @@ devataMode: true,
             });
         } 
     };
+    function getAyadiHealthPenalty(data) {
+        let penalty = 0;
+        // Expected rule: non-auspicious yoni costs 20 points; income <= debt costs 15.
+        if (data.y > 0 && ![1, 3, 5, 7].includes(data.y)) penalty += 20;
+        if (data.dr <= data.ru) penalty += 15;
+        return penalty;
+    }
+
     function updateHealthScore() {
         let score = 100;
         const metric = getAyadiMetric();
         const data = getAyadiData(metric);
-        // Deduct points for Ayadi issues
-        if(data.yoni > 0 && ![1,3,5,7].includes(data.yoni)) score -= 20;
-        if(data.aaya <= data.runam) score -= 15;
+        // Deduct points for Ayadi issues using the fields returned by getAyadiData().
+        score -= getAyadiHealthPenalty(data);
         // Deduct for room placement
         let hP = getHousePolygon(); let px = 300 / Math.max(state.siteW, state.siteS);
         let roomCount = 0, goodCount = 0;
@@ -2014,38 +2008,53 @@ devataMode: true,
         "Hall": "#ccfbf1", "Staircase": "#94a3b8", "Dressing": "#ddd6fe", "Store": "#d1d5db"
     };
 
+    function calculatePolygonArea(polygon) {
+        const vertices = Array.isArray(polygon) ? polygon : [polygon.sw, polygon.se, polygon.ne, polygon.nw];
+        if (vertices.length < 3 || vertices.some(point => !point || !Number.isFinite(point.x) || !Number.isFinite(point.y))) return 0;
+        let doubleArea = 0;
+        for (let i = 0; i < vertices.length; i++) {
+            const current = vertices[i];
+            const next = vertices[(i + 1) % vertices.length];
+            doubleArea += current.x * next.y - next.x * current.y;
+        }
+        return Math.abs(doubleArea) / 2;
+    }
+    function captureFloorReportImage(floor) {
+        const previousFloor = state.currentFloor;
+        const previousRooms = state.rooms;
+        const previousWalls = state.walls;
+        try {
+            state.currentFloor = floor;
+            state.rooms = JSON.parse(JSON.stringify(state.roomsByFloor[floor] || []));
+            state.walls = JSON.parse(JSON.stringify(state.wallsByFloor[floor] || []));
+            window.draw();
+            try { return canvas.toDataURL('image/png'); } catch (e) { return ''; }
+        } finally {
+            state.currentFloor = previousFloor;
+            state.rooms = previousRooms;
+            state.walls = previousWalls;
+            window.draw();
+        }
+    }
     window.generateReport = function() {
         // Save current floor data before generating report
         if(!state.roomsByFloor) state.roomsByFloor = {0:[], 1:[]};
         if(!state.wallsByFloor) state.wallsByFloor = {0:[], 1:[]};
         state.roomsByFloor[state.currentFloor||0] = JSON.parse(JSON.stringify(state.rooms||[]));
         state.wallsByFloor[state.currentFloor||0]  = JSON.parse(JSON.stringify(state.walls||[]));
-        
+
         var _cc = document.getElementById('canvasContainer');
         var _wasHidden = _cc && _cc.classList.contains('mob-hidden');
         if (_wasHidden) _cc.classList.remove('mob-hidden');
-        window.draw(); 
-        let imgData = ""; 
-        try { imgData = canvas.toDataURL('image/png'); } catch(e) { console.warn("Canvas is tainted."); }
+        window.draw();
+        let imgData = '';
+        try { imgData = canvas.toDataURL('image/png'); } catch(e) { console.warn('Canvas is tainted.'); }
         if (_wasHidden) _cc.classList.add('mob-hidden');
-        
-        // Capture 1F canvas image if it exists
-        let imgData1F = "";
+
+        let imgData1F = '';
         if(state.roomsByFloor[1] && state.roomsByFloor[1].length > 0) {
-            let savedFloor = state.currentFloor;
-            // Temporarily switch to 1F to draw it, capture, then switch back
-            state.currentFloor = 1;
-            state.rooms = JSON.parse(JSON.stringify(state.roomsByFloor[1]||[]));
-            state.walls = JSON.parse(JSON.stringify(state.wallsByFloor[1]||[]));
-            window.draw();
-            try { imgData1F = canvas.toDataURL('image/png'); } catch(e) {}
-            // Restore GF
-            state.currentFloor = savedFloor;
-            state.rooms = JSON.parse(JSON.stringify(state.roomsByFloor[savedFloor]||[]));
-            state.walls = JSON.parse(JSON.stringify(state.wallsByFloor[savedFloor]||[]));
-            window.draw();
+            imgData1F = captureFloorReportImage(1);
         }
-        
         const sP = getSitePolygon(), hP = getHousePolygon();
         const sDevData = getShiftedDevathas(sP, state.siteN, state.siteE, state.siteS, state.siteW, state.rotation);
         const hDevData = getShiftedDevathas(hP, state.houseEw, state.houseNs, state.houseEw, state.houseNs, state.rotation);
@@ -2083,7 +2092,7 @@ devataMode: true,
         let tTotalWindows = tAutoWindows + tManualWindows;
 
         // ── POINT 2: Area calculations in sq.ft ──
-        let siteAreaSqft = state.siteS * state.siteW; // S side × W side (approx rectangle)
+        let siteAreaSqft = calculatePolygonArea(sP); // Site polygon area from its four measured corners
         let builtAreaSqft = state.houseEw * state.houseNs;
         let setbackN = state.setN, setbackS = state.setS, setbackE = state.setE, setbackW = state.setW;
         let setbackAreaSqft = siteAreaSqft - builtAreaSqft;
@@ -2564,7 +2573,11 @@ ${getVastuRecommendations()}
         
         const pr = p[id];
         if(pr) {
-            Object.assign(state, pr);
+            let validatedProject;
+            try { validatedProject = validateImportedProject(pr); }
+            catch(e) { showToast('Saved project is invalid'); return; }
+            Object.assign(state, validatedProject);
+            if (typeof window.migrateToFloors === 'function') window.migrateToFloors();
             window.updateFromInputs();
             if(state.selectedDwara) {
                 const dwaraSelect = document.getElementById('dwaraSelect');
@@ -2585,47 +2598,128 @@ ${getVastuRecommendations()}
         document.body.appendChild(dlAnchorEle); dlAnchorEle.click(); dlAnchorEle.remove(); 
     };
     
-    window.importProject = function(event) {
-        const file = event.target.files[0]; if (!file) return;
-        // Schema whitelist — only allow known state keys to prevent malicious injection
-        const ALLOWED_KEYS = ['clientName','clientPlace','clientPhone','siteN','siteS','siteE','siteW',
-            'setN','setS','setE','setW','houseNs','houseEw','rotation','roadDir','roadWidth',
+    function validateImportedProject(raw) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Project must be a JSON object');
+        if (raw.siteN === undefined && raw.rooms === undefined) throw new Error('Not a Samartha Vastu project');
+
+        const allowedKeys = ['clientName','clientPlace','clientPhone','siteN','siteS','siteE','siteW',
+            'setN','setS','setE','setW','houseNs','houseEw','houseN','houseS','houseE','houseW','rotation','roadDir','roadWidth','sunCity','sunLat','devataMode','showZoneLines','showDevataZoneLines',
             'showRoad','ayadiShastra','ayadiUnit','ayadiDivisor','wallDeduction','selectedDwara',
-            'lang','rooms','roomsByFloor','texts','shapes','walls','inkLines','inkColor',
+            'lang','rooms','roomsByFloor','wallsByFloor','texts','textsByFloor','floorInitialized','shapes','walls','inkLines','inkColor',
             'scale','offsetX','offsetY','showGrid','showDimensions','showMahamarma','showUpamarma',
-            'showPlotDeities','showSiteDeities','show16Zones','showSunPath','snap','xray','showDevataZoneNames',
+            'showPlotDeities','showSiteDeities','show16Zones','showSunPath','snap','xray','showDevataZoneNames','showDevataZoneLines','showZoneLines','devataMode',
             'currentFloor','isLShape','lCutCorner','lCutW','lCutH','magDeclination',
             'bgImgX','bgImgY','bgImgScale','roadWidthFt'];
+        const imported = {};
+        allowedKeys.forEach(key => { if (raw[key] !== undefined) imported[key] = raw[key]; });
+
+        const numericKeys = ['siteN','siteS','siteE','siteW','setN','setS','setE','setW','houseNs','houseEw',
+            'rotation','roadWidth','ayadiDivisor','wallDeduction','scale','offsetX','offsetY','currentFloor','houseN','houseS','houseE','houseW','sunLat',
+            'lCutCorner','lCutW','lCutH','magDeclination','bgImgX','bgImgY','bgImgScale','roadWidthFt'];
+        numericKeys.forEach(key => {
+            if (imported[key] !== undefined && (typeof imported[key] !== 'number' || !Number.isFinite(imported[key]) || Math.abs(imported[key]) > 1000000)) {
+                throw new Error('Invalid numeric field: ' + key);
+            }
+        });
+        ['siteN','siteS','siteE','siteW','houseNs','houseEw','scale','ayadiDivisor'].forEach(key => {
+            if (imported[key] !== undefined && imported[key] <= 0) throw new Error('Invalid positive field: ' + key);
+        });
+        if (imported.currentFloor !== undefined && ![0, 1].includes(imported.currentFloor)) throw new Error('Invalid floor');
+        if (imported.lang !== undefined && !['en','te','hi','kn','ta','ml'].includes(imported.lang)) throw new Error('Invalid language');
+
+        const cleanText = (value, max) => String(value).replace(/</g, '&lt;').replace(/>/g, '&gt;').slice(0, max);
+        const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+        const validateRoom = room => {
+            if (!isRecord(room)) throw new Error('Invalid room record');
+            if (room.name !== undefined && typeof room.name !== 'string') throw new Error('Invalid room name');
+            if (room.type !== undefined && typeof room.type !== 'string') throw new Error('Invalid room type');
+            const item = { ...room };
+            if (!item.type) item.type = item.name || '';
+            if (item.name !== undefined) item.name = cleanText(item.name, 80);
+            if (item.type.length > 80) item.type = item.type.slice(0, 80);
+            ['wF','wI','hF','hI','htF','htI','x','y','rotation'].forEach(key => {
+                if (item[key] !== undefined && (typeof item[key] !== 'number' || !Number.isFinite(item[key]) || Math.abs(item[key]) > 1000000)) {
+                    throw new Error('Invalid room dimension: ' + key);
+                }
+            });
+            if (item.wI === undefined && typeof item.wF === 'number') { item.wI = Math.round((item.wF % 1) * 12); item.wF = Math.floor(item.wF); }
+            if (item.hI === undefined && typeof item.hF === 'number') { item.hI = Math.round((item.hF % 1) * 12); item.hF = Math.floor(item.hF); }
+            return item;
+        };
+        if (imported.rooms !== undefined) {
+            if (!Array.isArray(imported.rooms) || imported.rooms.length > 10000) throw new Error('Invalid rooms list');
+            imported.rooms = imported.rooms.map(validateRoom);
+        }
+        if (imported.roomsByFloor !== undefined) {
+            if (!isRecord(imported.roomsByFloor)) throw new Error('Invalid floor data');
+            imported.roomsByFloor = { ...imported.roomsByFloor };
+            Object.keys(imported.roomsByFloor).forEach(floor => {
+                if (!/^(0|1)$/.test(floor) || !Array.isArray(imported.roomsByFloor[floor]) || imported.roomsByFloor[floor].length > 10000) throw new Error('Invalid floor room list');
+                imported.roomsByFloor[floor] = imported.roomsByFloor[floor].map(validateRoom);
+            });
+        }
+        ['wallsByFloor','textsByFloor'].forEach(key => {
+            if (imported[key] === undefined) return;
+            if (!isRecord(imported[key])) throw new Error('Invalid ' + key);
+            imported[key] = Object.fromEntries(Object.entries(imported[key]).map(([floor, items]) => [floor, Array.isArray(items) ? items.map(item => isRecord(item) ? { ...item } : item) : items]));
+            Object.keys(imported[key]).forEach(floor => {
+                if (!/^(0|1)$/.test(floor) || !Array.isArray(imported[key][floor]) || imported[key][floor].length > 50000 || imported[key][floor].some(item => !isRecord(item))) {
+                    throw new Error('Invalid ' + key + ' floor list');
+                }
+                if (key === 'textsByFloor') imported[key][floor].forEach(item => {
+                    if (item.text !== undefined && typeof item.text !== 'string') throw new Error('Invalid floor text');
+                    if (typeof item.text === 'string') item.text = cleanText(item.text, 200);
+                });
+            });
+        });
+        if (imported.floorInitialized !== undefined) {
+            if (!isRecord(imported.floorInitialized) || Object.keys(imported.floorInitialized).some(floor => !/^(0|1)$/.test(floor) || typeof imported.floorInitialized[floor] !== 'boolean')) {
+                throw new Error('Invalid floor initialization data');
+            }
+        }
+        ['texts','shapes','walls','inkLines'].forEach(key => {
+            if (imported[key] !== undefined && (!Array.isArray(imported[key]) || imported[key].length > 50000 || imported[key].some(item => !isRecord(item)))) {
+                throw new Error('Invalid ' + key + ' list');
+            }
+        });
+        if (imported.texts) {
+            imported.texts = imported.texts.map(item => ({ ...item }));
+            imported.texts.forEach(item => {
+            if (item.text !== undefined && typeof item.text !== 'string') throw new Error('Invalid text label');
+            if (typeof item.text === 'string') item.text = cleanText(item.text, 200);
+            });
+        }
+        ['sunCity','roadDir','ayadiShastra','ayadiUnit','selectedDwara','inkColor'].forEach(key => {
+            if (imported[key] !== undefined && (typeof imported[key] !== 'string' || imported[key].length > 100)) throw new Error('Invalid string field: ' + key);
+        });
+        ['showRoad','showGrid','showZoneLines','showDimensions','showSunPath','showMahamarma','showUpamarma',
+            'showPlotDeities','showSiteDeities','show16Zones','snap','xray','showDevataZoneNames','showDevataZoneLines',
+            'isLShape','devataMode'].forEach(key => {
+            if (imported[key] !== undefined && typeof imported[key] !== 'boolean') throw new Error('Invalid boolean field: ' + key);
+        });
+        ['clientName','clientPlace','clientPhone'].forEach(key => {
+            if (imported[key] !== undefined) {
+                if (typeof imported[key] !== 'string') throw new Error('Invalid client field');
+                imported[key] = cleanText(imported[key], 100);
+            }
+        });
+        return imported;
+    }
+    window.importProject = function(event) {
+        const file = event.target.files[0]; if (!file) return;
+        if (file.size > 5 * 1024 * 1024) { alert('Project file is too large (5 MB maximum).'); return; }
         const reader = new FileReader();
         reader.onload = function(e) {
             try {
                 const raw = JSON.parse(e.target.result);
-                // Validate: must have at least siteN and rooms
-                if(typeof raw !== 'object' || raw === null) throw new Error('Not an object');
-                if(raw.siteN === undefined && raw.rooms === undefined) throw new Error('Not a Samartha Vastu file');
-                // Strip unknown keys
-                const importedState = {};
-                ALLOWED_KEYS.forEach(k => { if(raw[k] !== undefined) importedState[k] = raw[k]; });
-                // Sanitize room data
-                if(importedState.rooms) importedState.rooms.forEach(r => {
-                    if(!r.type) r.type = r.name;
-                    if(r.wI === undefined) { r.wI = Math.round((r.wF % 1) * 12); r.wF = Math.floor(r.wF); }
-                    if(r.hI === undefined) { r.hI = Math.round((r.hF % 1) * 12); r.hF = Math.floor(r.hF); }
-                    // Sanitize room name
-                    if(r.name) r.name = String(r.name).replace(/</g,'&lt;').replace(/>/g,'&gt;').substring(0,80);
-                });
-                // Sanitize text labels
-                if(importedState.texts) importedState.texts.forEach(t => {
-                    if(t.text) t.text = String(t.text).replace(/</g,'&lt;').replace(/>/g,'&gt;').substring(0,200);
-                });
-                // Sanitize client fields
-                ['clientName','clientPlace','clientPhone'].forEach(k => {
-                    if(importedState[k]) importedState[k] = String(importedState[k]).replace(/</g,'&lt;').replace(/>/g,'&gt;').substring(0,100);
-                });
+                const importedState = validateImportedProject(raw);
                 Object.assign(state, importedState);
+                if (typeof window.migrateToFloors === 'function') window.migrateToFloors();
                 window.updateFromInputs(); renderItemList();
                 if(state.selectedDwara) document.getElementById('dwaraSelect').value = state.selectedDwara;
-                window.toggleProjectManager(); window.draw(); window.saveStateToHistory();
+                const projectModal = document.getElementById('projectManagerModal');
+                if (projectModal && projectModal.style.display === 'flex') window.toggleProjectManager();
+                window.draw(); window.saveStateToHistory();
                 showToast("Project Imported Successfully!");
             } catch(err) { alert("Invalid or incompatible project file. Please use a Samartha Vastu .json export."); }
         };
@@ -4917,12 +5011,12 @@ tr:nth-child(even) td{background:#0f172a}
     window.openLearningGuide = function() {
         const lang = (state && state.lang) ? state.lang : 'en';
         const URLS = {
-            en: 'https://vssomarajupalli-lgtm.github.io/samarthavastu_mobile-app/guide_en.pdf',
-            te: 'https://vssomarajupalli-lgtm.github.io/samarthavastu_mobile-app/guide_te.pdf',
-            hi: 'https://vssomarajupalli-lgtm.github.io/samarthavastu_mobile-app/guide_hi.pdf',
-            kn: 'https://vssomarajupalli-lgtm.github.io/samarthavastu_mobile-app/guide_kn.pdf',
-            ta: 'https://vssomarajupalli-lgtm.github.io/samarthavastu_mobile-app/guide_ta.pdf',
-            ml: 'https://vssomarajupalli-lgtm.github.io/samarthavastu_mobile-app/guide_ml.pdf'
+            en: './guide_en.pdf',
+            te: './guide_te.pdf',
+            hi: './guide_hi.pdf',
+            kn: './guide_kn.pdf',
+            ta: './guide_ta.pdf',
+            ml: './guide_ml.pdf'
         };
         window.open(URLS[lang] || URLS.en, '_blank');
     };
@@ -5253,6 +5347,7 @@ Q.E.D. — Geometric proof. Undeniable.
         // Update road devtha strip language when app language changes
         setTimeout(window.updateRoadDevthaStrip, 50);
         state.lang = lang;
+        document.documentElement.lang = lang;
         localStorage.setItem('lang', lang); // keep in sync with Step 5 pattern
         // Update reportLang select to match
         const rl = document.getElementById('reportLang');
@@ -5299,6 +5394,7 @@ Q.E.D. — Geometric proof. Undeniable.
         // Read from both state.lang (app state) and localStorage("lang") — keep in sync
         const lang = state.lang || localStorage.getItem('lang') || 'en';
         state.lang = lang;
+        document.documentElement.lang = lang;
         localStorage.setItem('lang', lang);
         const gl = document.getElementById('globalLangSelect');
         if(gl) gl.value = lang;
@@ -5375,49 +5471,17 @@ Q.E.D. — Geometric proof. Undeniable.
     // ═══════════════════════════════════════════════════
     // PWA: SERVICE WORKER REGISTRATION
     // ═══════════════════════════════════════════════════
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-        // Use data: URI for SW — works in Chrome, Edge, Samsung Browser
-        // Blob URL approach blocked by Firefox/Safari security policies
-        const swCode = [
-            "const CACHE='samartha-vastu-v1';",
-            "self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll([self.registration.scope]).catch(()=>{})));self.skipWaiting();});",
-            "self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});",
-            "self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.match(e.request).then(cached=>{if(cached)return cached;return fetch(e.request).then(res=>{if(res&&res.status===200){const cl=res.clone();caches.open(CACHE).then(c=>c.put(e.request,cl));}return res;}).catch(()=>cached);}));});"
-        ].join('\n');
+    if ('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')) {
+        navigator.serviceWorker.register('./service-worker.js', { scope: './' })
+            .then(() => console.log('Samartha Vastu service worker registered'))
+            .catch(err => console.info('Offline support unavailable:', err && err.message));
 
-        // Try data: URI first (Chrome/Edge), then blob fallback, then skip gracefully
-        function tryRegisterSW(swText) {
-            // Method 1: data: URI (most compatible, no blob protocol issue)
-            const encoded = 'data:text/javascript;charset=utf-8,' + encodeURIComponent(swText);
-            return navigator.serviceWorker.register(encoded, { scope: './' });
-        }
-
-        tryRegisterSW(swCode)
-            .then(reg => {
-                console.log('✅ Samartha Vastu SW registered');
-                // Trigger cache of current page
-                if (reg.active) reg.active.postMessage({ type: 'SKIP_WAITING' });
-            })
-            .catch(() => {
-                // data: URI also blocked — try blob as last resort
-                try {
-                    const blob = new Blob([swCode], { type: 'application/javascript' });
-                    const blobUrl = URL.createObjectURL(blob);
-                    navigator.serviceWorker.register(blobUrl)
-                        .then(() => console.log('✅ SW registered via blob'))
-                        .catch(() => console.info('ℹ️ SW not supported in this browser — offline mode unavailable'));
-                } catch(e) {
-                    console.info('ℹ️ SW registration not available — app will work online only');
-                }
-            });
-
-        // Online/Offline banner — works regardless of SW support
         function updateNetworkBanner() {
             const banner = document.getElementById('networkBanner');
             if (!banner) return;
             if (!navigator.onLine) {
                 banner.style.display = 'flex';
-                banner.innerHTML = '<i class="fa-solid fa-wifi-slash mr-2"></i> Working Offline — all data saved locally';
+                banner.textContent = 'Working Offline — changes are saved locally';
                 banner.style.background = '#b45309';
             } else {
                 banner.style.display = 'none';
@@ -5427,7 +5491,6 @@ Q.E.D. — Geometric proof. Undeniable.
         window.addEventListener('offline', updateNetworkBanner);
         setTimeout(updateNetworkBanner, 500);
     }
-
     // ═══════════════════════════════════════════════════
     // PWA: INSTALL PROMPT (Android Chrome / Edge / Samsung)
     // ═══════════════════════════════════════════════════
