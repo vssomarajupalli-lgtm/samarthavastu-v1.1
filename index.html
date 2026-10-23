@@ -36,6 +36,14 @@
           crossorigin="anonymous" 
           referrerpolicy="no-referrer">
     <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./vendor/three/three.module.js",
+            "three/addons/": "./vendor/three/addons/"
+        }
+    }
+    </script>
 
 </head>
 <body class="h-screen flex flex-col overflow-hidden relative">
@@ -1603,6 +1611,22 @@
                   <span id="stripSetbackSqyd" style="font-size:8px;color:#d97706;font-weight:700;text-shadow:0 0 5px rgba(255,255,255,0.95),0 0 3px rgba(255,255,255,1);">145 yds</span>
                 </div>
                 <canvas id="vastuCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+                <div id="planViewSwitcher" class="plan-view-switcher" role="group" aria-label="Floor plan view">
+                    <button type="button" data-plan-view="2d" aria-pressed="true">2D Plan</button>
+                    <button type="button" data-plan-view="3d" aria-pressed="false">3D Preview</button>
+                </div>
+                <section id="vastu3DStage" class="vastu-3d-stage" aria-label="3D floor plan preview" hidden>
+                    <canvas id="vastu3DCanvas" aria-label="Interactive 3D floor plan"></canvas>
+                    <div id="vastu3DError" class="vastu-3d-error" role="status" aria-live="polite" hidden></div>
+                    <div class="vastu-3d-toolbar">
+                        <strong>3D model preview</strong>
+                        <label><input type="checkbox" id="vastu3DStackFloors"> Show both floors</label>
+                        <label><input type="checkbox" id="vastu3DLabels" checked> Show Devata labels</label>
+                        <button type="button" id="vastu3DResetCamera">Reset view</button>
+                        <span id="vastu3DSummary" aria-live="polite"></span>
+                    </div>
+                    <p class="vastu-3d-note">North up · East right · Same positions and dimensions as 2D · Drag to rotate · scroll or pinch to zoom · Visual preview, not a construction drawing</p>
+                </section>
              <!-- ── Mobile floating Cancel Tool button — only visible when a tool is active ── -->
              <div id="mobCancelToolBtn" style="display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:500;pointer-events:auto;">
                  <button onclick="window.mobCancelActiveTool();" style="background:rgba(239,68,68,0.92);color:#fff;border:none;border-radius:24px;padding:8px 20px;font-size:13px;font-weight:900;box-shadow:0 4px 16px rgba(0,0,0,0.4);display:flex;align-items:center;gap:8px;cursor:pointer;touch-action:manipulation;letter-spacing:0.03em;">
@@ -1890,5 +1914,7 @@
 <!-- ══ BLUEPRINT ENGINE + UI POLISH CSS ══ -->
 <script src="app.js"></script>
 <script src="patches.js"></script>
+<script src="./floorplan-3d-model.js"></script>
+<script type="module" src="./3d-view.js"></script>
 </body>
 </html>
