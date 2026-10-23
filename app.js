@@ -1,4 +1,4 @@
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v1.1';
 /* ════ JS Block: lines 2194–7454 from original index.html ════ */
     // ══════════════════════════════════════════════════════════════════
     // SECURITY MODULE - XSS Prevention & Data Protection
