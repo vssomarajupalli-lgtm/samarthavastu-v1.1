@@ -1,8 +1,8 @@
 'use strict';
 
 const CACHE_PREFIX = 'samartha-vastu-v1.1::' + new URL(self.registration.scope).pathname + '::';
-const CACHE_NAME = CACHE_PREFIX + 'shell';
-const APP_SHELL = ['./', './index.html', './app.js', './patches.js', './style.css', './manifest.webmanifest', './icon.svg'];
+const CACHE_NAME = CACHE_PREFIX + 'shell-v2';
+const APP_SHELL = ['./', './index.html', './app.js', './patches.js', './style.css', './manifest.webmanifest', './icon.svg', './floorplan-3d-model.js', './3d-view.js', './vendor/three/three.module.js', './vendor/three/three.core.js', './vendor/three/addons/controls/OrbitControls.js', './vendor/three/addons/capabilities/WebGL.js'];
 const MAX_CACHED_RESPONSE_BYTES = 5 * 1024 * 1024;
 const CDN_HOSTS = new Set(['cdn.tailwindcss.com', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com']);
 

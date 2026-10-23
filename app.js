@@ -207,6 +207,68 @@ devataMode: true,
     
     var canvas, ctx, showNavavargulu = false, stateHistory = [], historyIndex = -1, isRestoring = false;
     window.state = state;
+    window.getVastu3DPlan = function() {
+        var activeFloor = Number(state.currentFloor) === 1 ? 1 : 0;
+        var housePolygon = getHousePolygon();
+        var sitePolygon = getSitePolygon();
+        function devathaLabels(poly, north, east, south, west, originX, originY) {
+            return getShiftedDevathas(poly, north, east, south, west, state.rotation).finalDevs.map(function(devatha) {
+                var point = getPtOnPerimeter((devatha.d_start + devatha.len / 2) % (north + east + south + west), poly, north, east, south, west);
+                return {
+                    name: String(devatha.name || '').slice(0, 40),
+                    direction: devatha.dir,
+                    rating: devatha.rating,
+                    length: devatha.len,
+                    x: point.x - originX,
+                    y: point.y - originY
+                };
+            });
+        }
+        function copyRoom(room) {
+            if (!room || typeof room !== 'object') return null;
+            return {
+                type: room.type, name: room.name, x: room.x, y: room.y,
+                wF: room.wF, wI: room.wI, hF: room.hF, hI: room.hI,
+                htF: room.htF, htI: room.htI, color: room.color,
+                hidden: !!room.hidden, isMarker: !!room.isMarker,
+                isFurniture: !!room.isFurniture, isOutside: !!room.isOutside
+            };
+        }
+        function floorData(floor) {
+            var rooms = floor === activeFloor ? (state.rooms || []) : ((state.roomsByFloor || {})[floor] || []);
+            var walls = floor === activeFloor ? (state.walls || []) : ((state.wallsByFloor || {})[floor] || []);
+            return {
+                index: floor,
+                rooms: rooms.map(copyRoom).filter(Boolean),
+                walls: walls.map(function(wall) {
+                    if (!wall || typeof wall !== 'object') return null;
+                    return {
+                        p1: wall.p1 ? { x: wall.p1.x, y: wall.p1.y } : null,
+                        p2: wall.p2 ? { x: wall.p2.x, y: wall.p2.y } : null,
+                        thickness: wall.thickness,
+                        height: wall.height
+                    };
+                }).filter(Boolean)
+            };
+        }
+        return {
+            houseWidth: state.houseEw,
+            houseDepth: state.houseNs,
+            wallThickness: state.wallDeduction || 0.375,
+            activeFloor: activeFloor,
+            showPlotDeities: !!state.showPlotDeities,
+            showSiteDeities: !!state.showSiteDeities,
+            houseDevathas: devathaLabels(housePolygon, state.houseNs, state.houseEw, state.houseNs, state.houseEw, housePolygon.sw.x, housePolygon.sw.y),
+            siteDevathas: devathaLabels(sitePolygon, state.siteN, state.siteE, state.siteS, state.siteW, housePolygon.sw.x, housePolygon.sw.y),
+            siteOutline: {
+                sw: { x: sitePolygon.sw.x - housePolygon.sw.x, y: sitePolygon.sw.y - housePolygon.sw.y },
+                se: { x: sitePolygon.se.x - housePolygon.sw.x, y: sitePolygon.se.y - housePolygon.sw.y },
+                ne: { x: sitePolygon.ne.x - housePolygon.sw.x, y: sitePolygon.ne.y - housePolygon.sw.y },
+                nw: { x: sitePolygon.nw.x - housePolygon.sw.x, y: sitePolygon.nw.y - housePolygon.sw.y }
+            },
+            floors: [floorData(0), floorData(1)]
+        };
+    };
 
     // ── Mobile header: show client name below "SAMARTHA VASTU" title ──
     window.syncMobHeaderClientName = function() {
